@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as AWS from 'aws-sdk';
-import { readFileSync } from 'fs';
+
+import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+
+import * as AWS from 'aws-sdk';
 import * as Sharp from 'sharp';
 
 @Injectable()
@@ -62,6 +64,10 @@ export class UploadService {
 
       let width = '',
         height = '';
+
+      const dir = './uploads';
+      if (!existsSync(dir)) mkdirSync(dir);
+
       const outputDir = join(
         process.cwd(),
         './uploads/' + fileObj.originalname,
