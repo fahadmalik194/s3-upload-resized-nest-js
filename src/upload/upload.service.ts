@@ -6,56 +6,31 @@ import { join } from 'path'
 
 import * as AWS from 'aws-sdk'
 import * as Sharp from 'sharp'
-import { UploadDto } from './upload.dto';
-import { UploadFileResponse } from './uploadMessages.response';
+
+import { UploadDto } from './upload.dto'
+import { UploadFileResponse } from './uploadMessages.response'
 
 @Injectable()
 export class UploadService {
     constructor(private config: ConfigService, private uploadFileResponse: UploadFileResponse) {}
-
+    private isImageFlag: boolean = false
     private S3 = new AWS.S3({
         region: this.config.get('AWS_S3_REGION'),
-        accessKeyId: this.config.get('AWS_S3_ACCESS_KEY_ID'),
-        secretAccessKey: this.config.get('AWS_S3_ACCESS_KEY_SECRET'),
+        accessKeyId: this.config.get('AWS_ACCESS_KEY_ID'),
+        secretAccessKey: this.config.get('AWS_ACCESS_KEY_SECRET'),
     })
 
-    async fileHandler(bodyObj:UploadDto, fileObj:Express.Multer.File) {
-        let isValidExtentionFlag:boolean = false,
-            isValidSizeFlag:boolean = false,
-            isImageFlag:boolean = false
+    async fileHandler(bodyObj: UploadDto, fileObj: Express.Multer.File) {
+        if (fileObj) this.isImageFlag = await this.isImage(fileObj.mimetype.split('/')[0])
+        else throw new ForbiddenException(this.uploadFileResponse.getNoFileAttachedError())
 
-        if (fileObj) {
-            isValidExtentionFlag = await this.isValidFileExtentions(fileObj.mimetype.split('/')[1])
-            isValidSizeFlag = await this.isValidFileSize(fileObj.size)
-            isImageFlag = await this.isImage(fileObj.mimetype.split('/')[0])
-        } else {
-            return { status: false, message: 'File not attached', data: {} }
-        }
+        if (!(await this.isValidFileExtentions(fileObj.mimetype.split('/')[1])))
+            throw new ForbiddenException(this.uploadFileResponse.getInValidExtentionError(fileObj.mimetype.split('/')[1]))
+        if (!(await this.isValidFileSize(fileObj.size))) throw new ForbiddenException(this.uploadFileResponse.getInValidFileSizeError(fileObj.size))
 
-        if (!isValidExtentionFlag) {
-            return {
-                status: false,
-                message: `File with (${fileObj.mimetype.split('/')[1]}) extention is not allowed`,
-                data: {},
-            }
-        }
-
-        if (!isValidSizeFlag)
-            return {
-                status: false,
-                message: `File size ${fileObj.size} kb is too large`,
-                data: {},
-            }
-
-        if (isImageFlag) {
-            let validDimesionFlag = await this.isValidFileDimensions(bodyObj.imageSize)
-
-            if (!validDimesionFlag)
-                return {
-                    status: false,
-                    message: this.uploadFileResponse.getImageSizeError(bodyObj.imageSize),
-                    data: {},
-                }
+        if (this.isImageFlag) {
+            if (!(await this.isValidFileDimensions(bodyObj.imageSize)))
+                throw new ForbiddenException(this.uploadFileResponse.getImageSizeError(bodyObj.imageSize))
 
             let width = '',
                 height = ''
@@ -78,20 +53,14 @@ export class UploadService {
 
             try {
                 await Sharp(fileObj.buffer).resize(parseInt(width), parseInt(height)).toFile(outputDir)
-
                 const ResizedImagebuffer = readFileSync(outputDir)
-
                 return await this.uploadOnS3Bucket({
                     originalname: fileObj.originalname,
                     buffer: ResizedImagebuffer,
                     mimetype: fileObj.mimetype,
                 })
             } catch (e) {
-                return {
-                    status: false,
-                    message: 'Internal Server Error',
-                    data: e.message,
-                }
+                throw new ForbiddenException(e.message)
             }
         } else {
             return await this.uploadOnS3Bucket(fileObj)
@@ -119,7 +88,7 @@ export class UploadService {
                 data: s3Response,
             }
         } catch (e) {
-            return { status: false, message: 'Internal Server Error', data: e }
+            throw new ForbiddenException(e.message)
         }
     }
 
