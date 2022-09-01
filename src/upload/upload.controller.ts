@@ -4,6 +4,7 @@ import {
   Post,
   UploadedFile,
   UseInterceptors,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
@@ -18,6 +19,7 @@ export class UploadController {
   uploadToS3(
     @Body() bodyObj: UploadDto,
     @UploadedFile() fileObj: Express.Multer.File,
+  
   ) {
     return this.uploadService.fileHandler(bodyObj, fileObj);
   }
